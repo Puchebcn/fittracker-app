@@ -1,5 +1,127 @@
 # CHANGELOG - FitTracker App
 
+## [0.2.0] - Dashboard Mejorado con Balance Energético - 2025-01-10
+
+### 🎯 Nuevas Funcionalidades
+
+#### Balance Energético Completo
+- **Card principal de balance** que muestra:
+  - Calorías consumidas (de las comidas)
+  - Calorías quemadas (entrenamientos + pasos estimados)
+  - Balance neto (consumido - quemado)
+  - Comparación con objetivo del día
+  - Diferencia con el objetivo (exceso o déficit adicional)
+
+#### Sistema de Semáforo
+- **Estado del balance con 4 niveles**:
+  - 🟢 **Excelente** (±200 kcal): "¡Perfecto! Estás en tu objetivo"
+  - 🟡 **Bueno** (200-400 kcal): "Ligeramente por encima/debajo"
+  - 🟠 **Advertencia** (400-600 kcal): "Cuidado, te estás excediendo/muy bajo"
+  - 🔴 **Peligro** (>600 kcal): "¡Demasiadas calorías!/¡Muy poco!"
+- Código de colores dinámico según el estado
+- Emoji y mensaje personalizado para cada nivel
+
+#### Widget de Margen Disponible
+- **Muestra calorías disponibles** para próximas comidas
+- **Sugerencias inteligentes**:
+  - < 0 kcal: "Ya superaste tu objetivo. Evita más comidas hoy"
+  - < 300 kcal: "Cena ligera: ensalada o proteína magra"
+  - < 600 kcal: "Comida moderada: proteína + verduras + carbohidratos"
+  - > 600 kcal: "Puedes comer normalmente"
+- **Categorización visual** (ligera/moderada/completa)
+- Iconos según tipo de comida recomendada
+
+#### Cálculo de Calorías Quemadas
+- **Entrenamientos**: Calorías registradas manualmente
+- **Pasos**: Estimación automática (0.04 kcal por paso)
+- **Total combinado** para cálculo del balance
+
+#### Mejoras Visuales
+- Barra de progreso mejorada con indicador de objetivo
+- Métricas presentadas de forma más clara (Consumido - Quemado = Neto)
+- Bordes de colores dinámicos según estado del balance
+- Card de hidratación movido junto a pasos
+
+### ⚙️ Mejoras Técnicas
+
+#### Lógica de Balance
+```typescript
+// Fórmula del balance neto
+netCalories = consumed - (workoutCalories + stepsCalories)
+difference = netCalories - target
+
+// Calorías por pasos
+stepsCalories = steps * 0.04
+```
+
+#### Tipos TypeScript
+- `BalanceStatus`: 'excellent' | 'good' | 'warning' | 'danger'
+- `BalanceInfo`: Interface completa para el balance energético
+- Tipado estricto en todos los cálculos
+
+### 📊 Métricas Implementadas
+
+**Balance Energético:**
+- Consumido: Suma de calorías de todas las comidas del día
+- Quemado entrenos: Calorías de workouts registrados
+- Quemado pasos: steps × 0.04 kcal
+- Total quemado: entrenamientos + pasos
+- Neto: consumido - total quemado
+- Diferencia: neto - objetivo
+
+**Margen Disponible:**
+- Restante = objetivo - neto
+- Categorías: ligera (<300), moderada (300-600), completa (>600)
+
+### 🎨 Experiencia de Usuario
+
+#### Feedback Visual Inmediato
+- El usuario ve al instante si va bien o mal en su día
+- Colores intuitivos (verde = bien, rojo = mal)
+- Mensajes claros y accionables
+
+#### Información Contextual
+- No solo números, sino sugerencias prácticas
+- Ayuda a tomar decisiones sobre próximas comidas
+- Motivación positiva cuando va bien
+
+#### Diseño Limpio
+- Cards bien organizadas por prioridad
+- Balance energético como protagonista
+- Información secundaria accesible pero no invasiva
+
+### ðŸ› ï¸ Cambios en la Estructura
+
+#### Componentes Modificados
+- `app/(tabs)/index.tsx`: Dashboard completamente rediseñado
+- Nuevos cálculos en `useMemo` para optimización
+- Hooks de datos existentes (`useUserData`) sin cambios
+
+#### Estilos Añadidos
+```
+- balanceCard: Card principal del balance
+- balanceMetrics: Grid de métricas (Consumido/Quemado/Neto)
+- balanceBar: Barra visual del balance
+- marginCard: Widget de margen disponible
+- marginSuggestion: Card de sugerencia de comida
+```
+
+### 📝 Próximas Mejoras Planificadas
+
+#### Funcionalidades Pendientes
+- [ ] Historial semanal de balance (gráfico de tendencia)
+- [ ] Predictor de peso basado en balance
+- [ ] Sistema de rachas (días consecutivos en objetivo)
+- [ ] Notificaciones inteligentes según balance
+- [ ] Comparador de opciones para compensar excesos
+
+#### Pantallas por Implementar
+- [ ] Pantalla de Entrenamientos (registrar y ver detalles)
+- [ ] Pantalla de Plan Semanal (planificación de comidas)
+- [ ] Pantalla de Perfil completa
+
+---
+
 ## [0.1.0] - Dashboard Conectado - 2025-01-05
 
 ### ✅ Implementado
@@ -130,33 +252,7 @@ Macros:
 }
 ```
 
-### 🚧 Pendiente de Implementar
-
-#### Funcionalidades
-- [ ] Pantalla de Nutrición (registrar comidas)
-- [ ] Pantalla de Entrenamientos (registrar entrenos)
-- [ ] Pantalla de Plan Semanal
-- [ ] Pantalla de Perfil completa
-- [ ] Gráficos visuales (peso, calorías, pasos)
-- [ ] Notificaciones
-- [ ] Modo offline
-
-#### Mejoras
-- [ ] Optimización de consultas a Supabase
-- [ ] Cache de datos
-- [ ] Manejo de errores mejorado
-- [ ] Testing unitario
-- [ ] Testing de integración
-
-### 📝 Notas Técnicas
-
-- El proyecto usa path aliases `@/` para imports
-- Todos los componentes usan StyleSheet en lugar de NativeWind
-- La autenticación persiste en AsyncStorage
-- Los datos se actualizan con pull-to-refresh
-- El modal de peso actualiza tanto `weight_history` como `users.current_weight`
-
-### 👤 Usuario de Prueba
+### 💤 Usuario de Prueba
 
 ```
 Nombre: Javi
@@ -167,7 +263,7 @@ Peso objetivo: 84 kg
 Nivel actividad: Moderado
 ```
 
-### 🐛 Problemas Conocidos
+### 🛠 Problemas Conocidos
 
 - ~~react-native-chart-kit causa errores de TypeScript~~ ✅ RESUELTO: Removido temporalmente
 - Los gráficos se implementarán en una versión futura
@@ -181,4 +277,4 @@ Nivel actividad: Moderado
 
 ---
 
-**Estado actual**: Dashboard completamente funcional con datos reales del usuario conectados a Supabase.
+**Estado actual**: Dashboard mejorado con sistema completo de balance energético, semáforo de estado y widgets inteligentes.

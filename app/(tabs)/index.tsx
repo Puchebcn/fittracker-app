@@ -1,7 +1,7 @@
 // app/(tabs)/index.tsx
-// Dashboard principal - VERSIÓN BÁSICA SIN GRÁFICOS
+// Dashboard principal - VERSIÓN MEJORADA CON BALANCE ENERGÉTICO
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,23 @@ import {
 } from '../../lib/calculations';
 
 const { width } = Dimensions.get('window');
+
+/**
+ * 🎯 TIPOS DE BALANCE
+ */
+type BalanceStatus = 'excellent' | 'good' | 'warning' | 'danger';
+
+interface BalanceInfo {
+  status: BalanceStatus;
+  netCalories: number;
+  consumed: number;
+  burned: number;
+  target: number;
+  difference: number;
+  emoji: string;
+  color: string;
+  message: string;
+}
 
 export default function DashboardScreen() {
   const { profile, weightHistory, dailyStats, loading, error, refresh } = useUserData();
@@ -88,6 +105,100 @@ export default function DashboardScreen() {
     }
   };
 
+  /**
+   * 🔥 CÁLCULO DEL BALANCE ENERGÉTICO
+   */
+  const balanceInfo = useMemo((): BalanceInfo | null => {
+    if (!profile) return null;
+
+    const age = calculateAge(profile.birth_date);
+    const bmr = calculateBMR(profile.current_weight, profile.height_cm, age);
+    const tdee = calculateTDEE(bmr, profile.activity_level);
+    const workoutBonus = calculateWorkoutBonus(dailyStats.workoutCalories);
+    const target = calculateDailyCalorieTarget(tdee, 600, workoutBonus);
+    
+    const consumed = dailyStats.totalCalories;
+    const burned = dailyStats.workoutCalories + Math.round(dailyStats.steps * 0.04); // 0.04 kcal por paso
+    const netCalories = consumed - burned;
+    const difference = netCalories - target;
+
+    let status: BalanceStatus;
+    let emoji: string;
+    let color: string;
+    let message: string;
+
+    // Sistema de semáforo
+    if (Math.abs(difference) <= 200) {
+      // 🟢 VERDE: Perfecto (-200 a +200 kcal)
+      status = 'excellent';
+      emoji = '🎯';
+      color = '#22c55e';
+      message = '¡Perfecto! Estás en tu objetivo';
+    } else if (Math.abs(difference) <= 400) {
+      // 🟡 AMARILLO: Aceptable (200-400 kcal)
+      status = 'good';
+      emoji = '👍';
+      color = '#f59e0b';
+      message = difference > 0 ? 'Ligeramente por encima' : 'Un poco bajo, pero bien';
+    } else if (Math.abs(difference) <= 600) {
+      // 🟠 NARANJA: Cuidado (400-600 kcal)
+      status = 'warning';
+      emoji = '⚠️';
+      color = '#f97316';
+      message = difference > 0 ? 'Cuidado, te estás excediendo' : 'Estás muy bajo, come algo';
+    } else {
+      // 🔴 ROJO: Peligro (>600 kcal)
+      status = 'danger';
+      emoji = '🚨';
+      color = '#ef4444';
+      message = difference > 0 ? '¡Demasiadas calorías!' : '¡Estás comiendo muy poco!';
+    }
+
+    return {
+      status,
+      netCalories,
+      consumed,
+      burned,
+      target,
+      difference,
+      emoji,
+      color,
+      message,
+    };
+  }, [profile, dailyStats]);
+
+  /**
+   * 🍽️ MARGEN DISPONIBLE PARA PRÓXIMAS COMIDAS
+   */
+  const mealMargin = useMemo(() => {
+    if (!balanceInfo) return null;
+
+    const remaining = balanceInfo.target - balanceInfo.netCalories;
+    
+    let suggestion: string;
+    let category: 'light' | 'moderate' | 'heavy';
+    
+    if (remaining < 0) {
+      suggestion = 'Ya superaste tu objetivo. Evita más comidas hoy';
+      category = 'light';
+    } else if (remaining < 300) {
+      suggestion = 'Cena ligera: ensalada o proteína magra';
+      category = 'light';
+    } else if (remaining < 600) {
+      suggestion = 'Comida moderada: proteína + verduras + carbohidratos';
+      category = 'moderate';
+    } else {
+      suggestion = 'Puedes comer normalmente';
+      category = 'heavy';
+    }
+
+    return {
+      remaining,
+      suggestion,
+      category,
+    };
+  }, [balanceInfo]);
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -97,7 +208,7 @@ export default function DashboardScreen() {
     );
   }
 
-  if (error || !profile) {
+  if (error || !profile || !balanceInfo) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error || 'No se pudo cargar el perfil'}</Text>
@@ -115,7 +226,6 @@ export default function DashboardScreen() {
   const targetCalories = calculateDailyCalorieTarget(tdee, 600, workoutBonus);
   const macros = calculateMacros(targetCalories, profile.target_weight);
   const weightProgress = calculateWeightProgress(profile.start_weight, profile.current_weight, profile.target_weight);
-  const caloriesRemaining = targetCalories - dailyStats.totalCalories;
   const stepsProgress = Math.min((dailyStats.steps / 10000) * 100, 100);
 
   return (
@@ -165,48 +275,122 @@ export default function DashboardScreen() {
       </View>
 
       <View style={styles.content}>
-        {/* Tarjetas de resumen */}
-        <View style={styles.summaryGrid}>
-          {/* Calorías */}
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryHeader}>
-              <Text style={styles.summaryLabel}>🔥 Calorías</Text>
-              <View
-                style={[
-                  styles.statusBadge,
-                  { backgroundColor: caloriesRemaining > 0 ? '#dcfce7' : '#fee2e2' },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusText,
-                    { color: caloriesRemaining > 0 ? '#16a34a' : '#dc2626' },
-                  ]}
-                >
-                  {caloriesRemaining > 0
-                    ? `${Math.round(caloriesRemaining)} rest`
-                    : `${Math.round(-caloriesRemaining)} exc`}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.summaryValue}>
-              {Math.round(dailyStats.totalCalories)}
-              <Text style={styles.summaryTarget}>/{targetCalories}</Text>
+        {/* 🆕 BALANCE ENERGÉTICO PRINCIPAL */}
+        <View style={[styles.balanceCard, { borderColor: balanceInfo.color }]}>
+          <View style={styles.balanceHeader}>
+            <Text style={styles.balanceTitle}>⚡ Balance Energético Hoy</Text>
+            <Text style={[styles.balanceStatus, { color: balanceInfo.color }]}>
+              {balanceInfo.emoji} {balanceInfo.message}
             </Text>
-            <View style={styles.progressBarSmall}>
-              <View
-                style={[
-                  styles.progressFillSmall,
-                  {
-                    width: `${Math.min((dailyStats.totalCalories / targetCalories) * 100, 100)}%`,
-                    backgroundColor: dailyStats.totalCalories > targetCalories ? '#ef4444' : '#f97316',
-                  },
-                ]}
-              />
+          </View>
+
+          {/* Métricas principales */}
+          <View style={styles.balanceMetrics}>
+            <View style={styles.balanceMetricItem}>
+              <Text style={styles.balanceMetricLabel}>Consumido</Text>
+              <Text style={[styles.balanceMetricValue, { color: '#f97316' }]}>
+                {Math.round(balanceInfo.consumed)}
+              </Text>
+              <Text style={styles.balanceMetricUnit}>kcal</Text>
+            </View>
+
+            <View style={styles.balanceMetricDivider}>
+              <Text style={styles.balanceMetricSign}>-</Text>
+            </View>
+
+            <View style={styles.balanceMetricItem}>
+              <Text style={styles.balanceMetricLabel}>Quemado</Text>
+              <Text style={[styles.balanceMetricValue, { color: '#22c55e' }]}>
+                {Math.round(balanceInfo.burned)}
+              </Text>
+              <Text style={styles.balanceMetricUnit}>kcal</Text>
+            </View>
+
+            <View style={styles.balanceMetricDivider}>
+              <Text style={styles.balanceMetricSign}>=</Text>
+            </View>
+
+            <View style={styles.balanceMetricItem}>
+              <Text style={styles.balanceMetricLabel}>Neto</Text>
+              <Text style={[styles.balanceMetricValue, { color: balanceInfo.color }]}>
+                {Math.round(balanceInfo.netCalories)}
+              </Text>
+              <Text style={styles.balanceMetricUnit}>kcal</Text>
             </View>
           </View>
 
-          {/* Pasos */}
+          {/* Barra visual del balance */}
+          <View style={styles.balanceBarContainer}>
+            <View style={styles.balanceBar}>
+              <View 
+                style={[
+                  styles.balanceBarFill, 
+                  { 
+                    width: `${Math.min((balanceInfo.netCalories / balanceInfo.target) * 100, 100)}%`,
+                    backgroundColor: balanceInfo.color 
+                  }
+                ]} 
+              />
+              <View style={styles.balanceBarTarget} />
+            </View>
+            <View style={styles.balanceBarLabels}>
+              <Text style={styles.balanceBarLabel}>0</Text>
+              <Text style={[styles.balanceBarLabel, { fontWeight: 'bold', color: '#6366f1' }]}>
+                Objetivo: {balanceInfo.target}
+              </Text>
+            </View>
+          </View>
+
+          {/* Diferencia con objetivo */}
+          <View style={styles.balanceDifference}>
+            <Text style={styles.balanceDifferenceLabel}>
+              {balanceInfo.difference > 0 ? 'Exceso:' : 'Déficit adicional:'}
+            </Text>
+            <Text style={[styles.balanceDifferenceValue, { color: balanceInfo.color }]}>
+              {Math.abs(Math.round(balanceInfo.difference))} kcal
+            </Text>
+          </View>
+        </View>
+
+        {/* 🆕 WIDGET DE MARGEN DISPONIBLE */}
+        {mealMargin && (
+          <View style={styles.marginCard}>
+            <View style={styles.marginHeader}>
+              <Text style={styles.marginTitle}>🍽️ Margen para próximas comidas</Text>
+            </View>
+            
+            <View style={styles.marginContent}>
+              <View style={styles.marginValueContainer}>
+                <Text style={[
+                  styles.marginValue,
+                  { color: mealMargin.remaining > 0 ? '#22c55e' : '#ef4444' }
+                ]}>
+                  {mealMargin.remaining > 0 ? Math.round(mealMargin.remaining) : 0}
+                </Text>
+                <Text style={styles.marginUnit}>kcal disponibles</Text>
+              </View>
+
+              <View style={[
+                styles.marginSuggestion,
+                {
+                  backgroundColor: mealMargin.category === 'light' 
+                    ? '#fef3c7' 
+                    : mealMargin.category === 'moderate' 
+                    ? '#dbeafe' 
+                    : '#d1fae5'
+                }
+              ]}>
+                <Text style={styles.marginSuggestionIcon}>
+                  {mealMargin.category === 'light' ? '🥗' : mealMargin.category === 'moderate' ? '🍽️' : '🍖'}
+                </Text>
+                <Text style={styles.marginSuggestionText}>{mealMargin.suggestion}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Tarjetas de resumen originales (Pasos) */}
+        <View style={styles.summaryGrid}>
           <View style={styles.summaryCard}>
             <View style={styles.summaryHeader}>
               <Text style={styles.summaryLabel}>👟 Pasos</Text>
@@ -227,6 +411,27 @@ export default function DashboardScreen() {
                   {
                     width: `${stepsProgress}%`,
                     backgroundColor: stepsProgress >= 100 ? '#22c55e' : '#6366f1',
+                  },
+                ]}
+              />
+            </View>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryHeader}>
+              <Text style={styles.summaryLabel}>💧 Hidratación</Text>
+            </View>
+            <Text style={styles.summaryValue}>
+              {dailyStats.waterGlasses}
+              <Text style={styles.summaryTarget}>/8</Text>
+            </Text>
+            <View style={styles.progressBarSmall}>
+              <View
+                style={[
+                  styles.progressFillSmall,
+                  {
+                    width: `${Math.min((dailyStats.waterGlasses / 8) * 100, 100)}%`,
+                    backgroundColor: '#3b82f6',
                   },
                 ]}
               />
@@ -283,19 +488,19 @@ export default function DashboardScreen() {
         <View style={styles.objectivesCard}>
           <Text style={styles.sectionTitle}>⚙️ Objetivos dinámicos</Text>
           <View style={styles.objectivesGrid}>
-            <View style={[styles.objectiveItem, { backgroundColor: '#f3f4f6' }]}>
+            <View style={[styles.objectiveItem, { backgroundColor: '#f9fafb' }]}>
               <Text style={styles.objectiveLabel}>Metabolismo</Text>
               <Text style={styles.objectiveValue}>{bmr} kcal</Text>
             </View>
-            <View style={[styles.objectiveItem, { backgroundColor: '#f3f4f6' }]}>
+            <View style={[styles.objectiveItem, { backgroundColor: '#f9fafb' }]}>
               <Text style={styles.objectiveLabel}>Gasto total</Text>
               <Text style={styles.objectiveValue}>{tdee} kcal</Text>
             </View>
-            <View style={[styles.objectiveItem, { backgroundColor: '#fef2f2' }]}>
+            <View style={[styles.objectiveItem, { backgroundColor: '#fee2e2' }]}>
               <Text style={styles.objectiveLabel}>Déficit</Text>
               <Text style={[styles.objectiveValue, { color: '#dc2626' }]}>-600</Text>
             </View>
-            <View style={[styles.objectiveItem, { backgroundColor: '#f0fdf4' }]}>
+            <View style={[styles.objectiveItem, { backgroundColor: '#dcfce7' }]}>
               <Text style={styles.objectiveLabel}>Objetivo hoy</Text>
               <Text style={[styles.objectiveValue, { color: '#16a34a' }]}>
                 {targetCalories} kcal
@@ -305,53 +510,43 @@ export default function DashboardScreen() {
         </View>
 
         {/* Historial de peso */}
-        {weightHistory.length > 0 && (
-          <View style={styles.weightHistoryCard}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.sectionTitle}>⚖️ Historial de peso</Text>
-              <TouchableOpacity style={styles.addButton} onPress={() => setShowWeightModal(true)}>
-                <Text style={styles.addButtonText}>+ Añadir</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {weightHistory.slice(-10).reverse().map((entry) => {
-                const date = new Date(entry.measured_at);
-                return (
-                  <View key={entry.id} style={styles.weightHistoryItem}>
-                    <Text style={styles.weightHistoryWeight}>
-                      {formatWeight(entry.weight)}
-                    </Text>
-                    <Text style={styles.weightHistoryDate}>
-                      {date.getDate()}/{date.getMonth() + 1}
-                    </Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
+        <View style={styles.weightHistoryCard}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.sectionTitle}>⚖️ Evolución peso</Text>
+            <TouchableOpacity style={styles.addButton} onPress={() => setShowWeightModal(true)}>
+              <Text style={styles.addButtonText}>+ Añadir</Text>
+            </TouchableOpacity>
           </View>
-        )}
-
-        {/* Hidratación */}
-        <View style={styles.hydrationCard}>
-          <Text style={styles.sectionTitle}>💧 Hidratación</Text>
-          <View style={styles.hydrationContent}>
-            <Text style={styles.hydrationValue}>{dailyStats.waterGlasses}</Text>
-            <Text style={styles.hydrationLabel}>vasos de agua hoy</Text>
-          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {weightHistory.slice(-10).map((entry, index) => (
+              <View key={index} style={styles.weightHistoryItem}>
+                <Text style={styles.weightHistoryWeight}>{formatWeight(entry.weight)}kg</Text>
+                <Text style={styles.weightHistoryDate}>
+                  {new Date(entry.measured_at).toLocaleDateString('es-ES', {
+                    day: '2-digit',
+                    month: 'short',
+                  })}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
         </View>
       </View>
 
-      {/* Modal para añadir peso */}
+      {/* Modal de peso */}
       <Modal
         visible={showWeightModal}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowWeightModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowWeightModal(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>⚖️ Registrar peso</Text>
-            
             <View style={styles.weightInputContainer}>
               <TextInput
                 style={styles.weightInput}
@@ -359,27 +554,21 @@ export default function DashboardScreen() {
                 onChangeText={setNewWeight}
                 placeholder={profile.current_weight.toString()}
                 keyboardType="decimal-pad"
-                maxLength={6}
+                maxLength={5}
               />
               <Text style={styles.weightUnit}>kg</Text>
             </View>
-
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  setShowWeightModal(false);
-                  setNewWeight('');
-                }}
-                disabled={savingWeight}
+                onPress={() => setShowWeightModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.modalButton, styles.saveButton]}
                 onPress={handleAddWeight}
-                disabled={savingWeight || !newWeight}
+                disabled={savingWeight}
               >
                 {savingWeight ? (
                   <ActivityIndicator color="#ffffff" />
@@ -389,7 +578,7 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
     </ScrollView>
   );
@@ -407,7 +596,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 12,
     fontSize: 16,
     color: '#6b7280',
   },
@@ -415,8 +604,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
     backgroundColor: '#f9fafb',
+    padding: 24,
   },
   errorText: {
     fontSize: 16,
@@ -432,28 +621,31 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: '#ffffff',
+    fontWeight: 'bold',
     fontSize: 16,
-    fontWeight: '600',
   },
   header: {
     backgroundColor: '#6366f1',
     padding: 16,
     paddingBottom: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 16,
   },
   greeting: {
     fontSize: 14,
-    color: '#c7d2fe',
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 4,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginTop: 4,
   },
   weightCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -468,14 +660,14 @@ const styles = StyleSheet.create({
   },
   weightUnit: {
     fontSize: 12,
-    color: '#c7d2fe',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   progressBar: {
     height: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 999,
-    marginTop: 16,
     overflow: 'hidden',
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
@@ -485,21 +677,21 @@ const styles = StyleSheet.create({
   weightIndicators: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    alignItems: 'center',
+    marginBottom: 12,
   },
   indicatorText: {
     fontSize: 12,
-    color: '#ffffff',
+    color: 'rgba(255, 255, 255, 0.9)',
   },
   lostWeight: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#86efac',
+    color: '#22c55e',
   },
   caloriesTags: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
   },
   tag: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -516,6 +708,164 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 12,
+  },
+  // 🆕 ESTILOS DEL BALANCE ENERGÉTICO
+  balanceCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+  },
+  balanceHeader: {
+    marginBottom: 16,
+  },
+  balanceTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  balanceStatus: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  balanceMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  balanceMetricItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  balanceMetricLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  balanceMetricValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  balanceMetricUnit: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 2,
+  },
+  balanceMetricDivider: {
+    width: 20,
+    alignItems: 'center',
+  },
+  balanceMetricSign: {
+    fontSize: 20,
+    color: '#9ca3af',
+    fontWeight: 'bold',
+  },
+  balanceBarContainer: {
+    marginBottom: 16,
+  },
+  balanceBar: {
+    height: 24,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  balanceBarFill: {
+    height: '100%',
+    borderRadius: 12,
+  },
+  balanceBarTarget: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: '#6366f1',
+  },
+  balanceBarLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  balanceBarLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+  },
+  balanceDifference: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    borderRadius: 8,
+  },
+  balanceDifferenceLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  balanceDifferenceValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // 🆕 ESTILOS DEL WIDGET DE MARGEN
+  marginCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  marginHeader: {
+    marginBottom: 12,
+  },
+  marginTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  marginContent: {
+    gap: 12,
+  },
+  marginValueContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  marginValue: {
+    fontSize: 36,
+    fontWeight: 'bold',
+  },
+  marginUnit: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  marginSuggestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  marginSuggestionIcon: {
+    fontSize: 24,
+  },
+  marginSuggestionText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -655,7 +1005,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 80,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -694,30 +1044,6 @@ const styles = StyleSheet.create({
   },
   weightHistoryDate: {
     fontSize: 12,
-    color: '#6b7280',
-  },
-  hydrationCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 80,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  hydrationContent: {
-    alignItems: 'center',
-  },
-  hydrationValue: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#3b82f6',
-    marginBottom: 8,
-  },
-  hydrationLabel: {
-    fontSize: 14,
     color: '#6b7280',
   },
   modalOverlay: {
