@@ -106,7 +106,14 @@ export default function DashboardScreen() {
   };
 
   /**
-   * 🔥 CÁLCULO DEL BALANCE ENERGÉTICO
+   * 🔥 CÁLCULO DEL BALANCE ENERGÉTICO CORRECTO
+   * 
+   * El TDEE ya incluye:
+   * - Metabolismo basal (BMR)
+   * - Actividad diaria normal (pasos, estar de pie, etc.)
+   * - Digestión de alimentos
+   * 
+   * Solo ajustamos por entrenamientos EXTRA que no estén en el factor de actividad
    */
   const balanceInfo = useMemo((): BalanceInfo | null => {
     if (!profile) return null;
@@ -114,22 +121,29 @@ export default function DashboardScreen() {
     const age = calculateAge(profile.birth_date);
     const bmr = calculateBMR(profile.current_weight, profile.height_cm, age);
     const tdee = calculateTDEE(bmr, profile.activity_level);
+    
+    // Bonus solo por entrenamientos registrados (50% para no sobrecompensar)
     const workoutBonus = calculateWorkoutBonus(dailyStats.workoutCalories);
+    
+    // Objetivo del día = TDEE - déficit + bonus de entreno
     const target = calculateDailyCalorieTarget(tdee, 600, workoutBonus);
     
+    // Balance simple: consumido vs objetivo
     const consumed = dailyStats.totalCalories;
-    const burned = dailyStats.workoutCalories + Math.round(dailyStats.steps * 0.04); // 0.04 kcal por paso
-    const netCalories = consumed - burned;
-    const difference = netCalories - target;
+    const difference = consumed - target;
+    
+    // Calorías quemadas (solo para mostrar, NO afectan el balance)
+    const burned = dailyStats.workoutCalories + Math.round(dailyStats.steps * 0.04);
+    const netCalories = consumed; // El "neto" es simplemente lo consumido
 
     let status: BalanceStatus;
     let emoji: string;
     let color: string;
     let message: string;
 
-    // Sistema de semáforo
+    // Sistema de semáforo basado en diferencia con objetivo
     if (Math.abs(difference) <= 200) {
-      // 🟢 VERDE: Perfecto (-200 a +200 kcal)
+      // 🟢 VERDE: Perfecto (±200 kcal)
       status = 'excellent';
       emoji = '🎯';
       color = '#22c55e';
@@ -158,7 +172,7 @@ export default function DashboardScreen() {
       status,
       netCalories,
       consumed,
-      burned,
+      burned, // Solo para referencia visual
       target,
       difference,
       emoji,
@@ -173,7 +187,8 @@ export default function DashboardScreen() {
   const mealMargin = useMemo(() => {
     if (!balanceInfo) return null;
 
-    const remaining = balanceInfo.target - balanceInfo.netCalories;
+    // Margen = cuánto puedes comer todavía
+    const remaining = balanceInfo.target - balanceInfo.consumed;
     
     let suggestion: string;
     let category: 'light' | 'moderate' | 'heavy';
@@ -275,47 +290,35 @@ export default function DashboardScreen() {
       </View>
 
       <View style={styles.content}>
-        {/* 🆕 BALANCE ENERGÉTICO PRINCIPAL */}
+        {/* 🆕 BALANCE ENERGÉTICO - VERSIÓN SIMPLE Y CORRECTA */}
         <View style={[styles.balanceCard, { borderColor: balanceInfo.color }]}>
           <View style={styles.balanceHeader}>
-            <Text style={styles.balanceTitle}>⚡ Balance Energético Hoy</Text>
+            <Text style={styles.balanceTitle}>⚡ Balance del Día</Text>
             <Text style={[styles.balanceStatus, { color: balanceInfo.color }]}>
               {balanceInfo.emoji} {balanceInfo.message}
             </Text>
           </View>
 
-          {/* Métricas principales */}
-          <View style={styles.balanceMetrics}>
-            <View style={styles.balanceMetricItem}>
-              <Text style={styles.balanceMetricLabel}>Consumido</Text>
-              <Text style={[styles.balanceMetricValue, { color: '#f97316' }]}>
+          {/* Comparación principal: Consumido vs Objetivo */}
+          <View style={styles.balanceMainComparison}>
+            <View style={styles.balanceMainItem}>
+              <Text style={styles.balanceMainLabel}>Has consumido</Text>
+              <Text style={[styles.balanceMainValue, { color: '#f97316' }]}>
                 {Math.round(balanceInfo.consumed)}
               </Text>
-              <Text style={styles.balanceMetricUnit}>kcal</Text>
+              <Text style={styles.balanceMainUnit}>kcal</Text>
             </View>
 
-            <View style={styles.balanceMetricDivider}>
-              <Text style={styles.balanceMetricSign}>-</Text>
+            <View style={styles.balanceMainDivider}>
+              <Text style={styles.balanceMainSign}>vs</Text>
             </View>
 
-            <View style={styles.balanceMetricItem}>
-              <Text style={styles.balanceMetricLabel}>Quemado</Text>
-              <Text style={[styles.balanceMetricValue, { color: '#22c55e' }]}>
-                {Math.round(balanceInfo.burned)}
+            <View style={styles.balanceMainItem}>
+              <Text style={styles.balanceMainLabel}>Tu objetivo</Text>
+              <Text style={[styles.balanceMainValue, { color: '#6366f1' }]}>
+                {Math.round(balanceInfo.target)}
               </Text>
-              <Text style={styles.balanceMetricUnit}>kcal</Text>
-            </View>
-
-            <View style={styles.balanceMetricDivider}>
-              <Text style={styles.balanceMetricSign}>=</Text>
-            </View>
-
-            <View style={styles.balanceMetricItem}>
-              <Text style={styles.balanceMetricLabel}>Neto</Text>
-              <Text style={[styles.balanceMetricValue, { color: balanceInfo.color }]}>
-                {Math.round(balanceInfo.netCalories)}
-              </Text>
-              <Text style={styles.balanceMetricUnit}>kcal</Text>
+              <Text style={styles.balanceMainUnit}>kcal</Text>
             </View>
           </View>
 
@@ -326,12 +329,11 @@ export default function DashboardScreen() {
                 style={[
                   styles.balanceBarFill, 
                   { 
-                    width: `${Math.min((balanceInfo.netCalories / balanceInfo.target) * 100, 100)}%`,
+                    width: `${Math.min((balanceInfo.consumed / balanceInfo.target) * 100, 100)}%`,
                     backgroundColor: balanceInfo.color 
                   }
                 ]} 
               />
-              <View style={styles.balanceBarTarget} />
             </View>
             <View style={styles.balanceBarLabels}>
               <Text style={styles.balanceBarLabel}>0</Text>
@@ -342,14 +344,43 @@ export default function DashboardScreen() {
           </View>
 
           {/* Diferencia con objetivo */}
-          <View style={styles.balanceDifference}>
+          <View style={[
+            styles.balanceDifference,
+            { backgroundColor: Math.abs(balanceInfo.difference) <= 200 ? '#f0fdf4' : '#fef2f2' }
+          ]}>
             <Text style={styles.balanceDifferenceLabel}>
-              {balanceInfo.difference > 0 ? 'Exceso:' : 'Déficit adicional:'}
+              {balanceInfo.difference > 0 ? 'Por encima del objetivo:' : 'Por debajo del objetivo:'}
             </Text>
             <Text style={[styles.balanceDifferenceValue, { color: balanceInfo.color }]}>
               {Math.abs(Math.round(balanceInfo.difference))} kcal
             </Text>
           </View>
+
+          {/* Info adicional: Actividad del día (solo informativo) */}
+          <View style={styles.balanceFooter}>
+            <View style={styles.balanceFooterItem}>
+              <Text style={styles.balanceFooterLabel}>🏃 Entrenos</Text>
+              <Text style={styles.balanceFooterValue}>
+                {Math.round(dailyStats.workoutCalories)} kcal
+              </Text>
+            </View>
+            <View style={styles.balanceFooterItem}>
+              <Text style={styles.balanceFooterLabel}>👟 Pasos</Text>
+              <Text style={styles.balanceFooterValue}>
+                {dailyStats.steps.toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.balanceFooterItem}>
+              <Text style={styles.balanceFooterLabel}>💧 Agua</Text>
+              <Text style={styles.balanceFooterValue}>
+                {dailyStats.waterGlasses}/8
+              </Text>
+            </View>
+          </View>
+          
+          <Text style={styles.balanceNote}>
+            💡 Tu objetivo ya incluye tu actividad diaria base
+          </Text>
         </View>
 
         {/* 🆕 WIDGET DE MARGEN DISPONIBLE */}
@@ -388,56 +419,6 @@ export default function DashboardScreen() {
             </View>
           </View>
         )}
-
-        {/* Tarjetas de resumen originales (Pasos) */}
-        <View style={styles.summaryGrid}>
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryHeader}>
-              <Text style={styles.summaryLabel}>👟 Pasos</Text>
-              {stepsProgress >= 100 && (
-                <View style={[styles.statusBadge, { backgroundColor: '#dcfce7' }]}>
-                  <Text style={[styles.statusText, { color: '#16a34a' }]}>✓</Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.summaryValue}>
-              {(dailyStats.steps / 1000).toFixed(1)}k
-              <Text style={styles.summaryTarget}>/10k</Text>
-            </Text>
-            <View style={styles.progressBarSmall}>
-              <View
-                style={[
-                  styles.progressFillSmall,
-                  {
-                    width: `${stepsProgress}%`,
-                    backgroundColor: stepsProgress >= 100 ? '#22c55e' : '#6366f1',
-                  },
-                ]}
-              />
-            </View>
-          </View>
-
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryHeader}>
-              <Text style={styles.summaryLabel}>💧 Hidratación</Text>
-            </View>
-            <Text style={styles.summaryValue}>
-              {dailyStats.waterGlasses}
-              <Text style={styles.summaryTarget}>/8</Text>
-            </Text>
-            <View style={styles.progressBarSmall}>
-              <View
-                style={[
-                  styles.progressFillSmall,
-                  {
-                    width: `${Math.min((dailyStats.waterGlasses / 8) * 100, 100)}%`,
-                    backgroundColor: '#3b82f6',
-                  },
-                ]}
-              />
-            </View>
-          </View>
-        </View>
 
         {/* Macros del día */}
         <View style={styles.macrosCard}>
@@ -709,7 +690,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 12,
   },
-  // 🆕 ESTILOS DEL BALANCE ENERGÉTICO
+  // 🆕 ESTILOS DEL BALANCE ENERGÉTICO SIMPLIFICADO
   balanceCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
@@ -720,7 +701,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
-    borderWidth: 2,
+    borderWidth: 3,
   },
   balanceHeader: {
     marginBottom: 16,
@@ -735,65 +716,60 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  balanceMetrics: {
+  balanceMainComparison: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingVertical: 12,
   },
-  balanceMetricItem: {
+  balanceMainItem: {
     flex: 1,
     alignItems: 'center',
   },
-  balanceMetricLabel: {
-    fontSize: 11,
+  balanceMainLabel: {
+    fontSize: 12,
     color: '#6b7280',
-    marginBottom: 4,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
-  balanceMetricValue: {
-    fontSize: 24,
+  balanceMainValue: {
+    fontSize: 32,
     fontWeight: 'bold',
   },
-  balanceMetricUnit: {
-    fontSize: 11,
+  balanceMainUnit: {
+    fontSize: 12,
     color: '#9ca3af',
-    marginTop: 2,
+    marginTop: 4,
   },
-  balanceMetricDivider: {
-    width: 20,
+  balanceMainDivider: {
+    width: 40,
     alignItems: 'center',
   },
-  balanceMetricSign: {
-    fontSize: 20,
-    color: '#9ca3af',
+  balanceMainSign: {
+    fontSize: 18,
+    color: '#d1d5db',
     fontWeight: 'bold',
   },
   balanceBarContainer: {
     marginBottom: 16,
   },
   balanceBar: {
-    height: 24,
+    height: 20,
     backgroundColor: '#e5e7eb',
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: 'hidden',
     position: 'relative',
   },
   balanceBarFill: {
     height: '100%',
-    borderRadius: 12,
-  },
-  balanceBarTarget: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
-    backgroundColor: '#6366f1',
+    borderRadius: 10,
   },
   balanceBarLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
+    marginTop: 6,
   },
   balanceBarLabel: {
     fontSize: 11,
@@ -803,17 +779,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
     padding: 12,
     borderRadius: 8,
+    marginBottom: 12,
   },
   balanceDifferenceLabel: {
     fontSize: 13,
     color: '#6b7280',
+    fontWeight: '500',
   },
   balanceDifferenceValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
+  },
+  balanceFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    marginBottom: 8,
+  },
+  balanceFooterItem: {
+    alignItems: 'center',
+  },
+  balanceFooterLabel: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  balanceFooterValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  balanceNote: {
+    fontSize: 11,
+    color: '#9ca3af',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   // 🆕 ESTILOS DEL WIDGET DE MARGEN
   marginCard: {
