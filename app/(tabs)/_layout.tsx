@@ -1,3 +1,6 @@
+// app/(tabs)/_layout.tsx
+// Layout de navegación por tabs - 4 pestañas limpias
+
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -6,70 +9,79 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#6366f1',
-        tabBarInactiveTintColor: '#94a3b8',
-        headerShown: false,
+        tabBarInactiveTintColor: '#9ca3af',
         tabBarStyle: {
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
-          borderTopColor: '#e2e8f0',
+          borderTopColor: '#e5e7eb',
           height: 60,
           paddingBottom: 8,
           paddingTop: 8,
         },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
+        headerShown: false,
       }}
     >
-      {/* Dashboard */}
+      {/* DASHBOARD - Resumen del día */}
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Resumen',
+          title: 'Inicio',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="grid-outline" size={size} color={color} />
+            <Ionicons name="home" size={size} color={color} />
           ),
         }}
       />
-      
-      {/* Nutrición - NUEVA TAB */}
+
+      {/* NUTRICIÓN - Registro de comidas */}
       <Tabs.Screen
         name="nutrition"
         options={{
-          title: 'Nutrición',
+          title: 'Comida',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="restaurant-outline" size={size} color={color} />
+            <Ionicons name="restaurant" size={size} color={color} />
           ),
         }}
       />
-      
-      {/* Plan */}
-      <Tabs.Screen
-        name="plan"
-        options={{
-          title: 'Plan',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      
-      {/* Workout */}
+
+      {/* ENTRENAMIENTOS - Workouts */}
       <Tabs.Screen
         name="workout"
         options={{
           title: 'Entreno',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="barbell-outline" size={size} color={color} />
+            <Ionicons name="barbell" size={size} color={color} />
           ),
         }}
       />
-      
-      {/* Profile */}
+
+      {/* PERFIL - Configuración y progreso */}
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Perfil',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+            <Ionicons name="person" size={size} color={color} />
           ),
+        }}
+      />
+
+      {/* OCULTAR PLAN - Ya no se usa */}
+      <Tabs.Screen
+        name="plan"
+        options={{
+          href: null, // Esto oculta el tab
+        }}
+      />
+
+      {/* OCULTAR TEST - Ya no se usa */}
+      <Tabs.Screen
+        name="test"
+        options={{
+          href: null, // Esto oculta el tab
         }}
       />
     </Tabs>
